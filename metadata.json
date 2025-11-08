@@ -1,0 +1,7 @@
+{
+  "name": "Memory Trip",
+  "description": "A visual memory game powered by generative AI. Progressively build a scene with AI-generated imagery and then recall the items added.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}

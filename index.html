@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Memory Trip</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              'brand-bg': '#f5f1e8', // Parchment
+              'brand-surface': '#ffffff', // Paper white
+              'brand-primary': '#e0ddd7', // Light gray stone
+              'brand-secondary': '#26a69a', // Teal Blue
+              'brand-text': '#3a3a3a', // Dark charcoal/ink
+              'brand-text-muted': '#7a7a7a', // Lighter gray ink
+            },
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+              display: ['Kalam', 'cursive'],
+            },
+          },
+        },
+      };
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Kalam:wght@400;700&display=swap" rel="stylesheet">
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.29.0"
+  }
+}
+</script>
+<style>
+  body {
+    background-image: url('https://images.unsplash.com/photo-1542044896530-05d85be9b115?q=80&w=2940&auto=format&fit=crop');
+    background-size: cover;
+    background-position: center center;
+    background-attachment: fixed;
+  }
+  body::before {
+    content: "";
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    /* This is the brand-bg color with opacity to soften the background image */
+    background-color: rgba(245, 241, 232, 0.85);
+    z-index: -1;
+  }
+  
+  /* --- ANIMATIONS --- */
+  
+  /* Title Animation */
+  .animated-title span {
+    display: inline-block;
+    position: relative;
+    animation: wave-text 1.8s ease-in-out infinite;
+  }
+
+  @keyframes wave-text {
+    0%, 100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-10px);
+    }
+  }
+
+  /* Button Glow Animation */
+  .animated-glow-button {
+    position: relative;
+    background: transparent !important;
+    z-index: 1;
+    color: white;
+  }
+
+  .animated-glow-button::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 150%;
+    aspect-ratio: 1/1;
+    background: conic-gradient(from 180deg at 50% 50%, #26a69a 0deg, #84e1d8 180deg, #26a69a 360deg);
+    z-index: -2;
+    border-radius: 0.5rem; /* 8px, matches rounded-lg */
+    animation: rotate-glow 4s linear infinite;
+  }
+
+  .animated-glow-button::after {
+    content: '';
+    position: absolute;
+    background-color: #26a69a; /* primary button color */
+    inset: 3px; /* border thickness */
+    border-radius: 6px; /* slightly smaller than button's radius */
+    z-index: -1;
+    transition: background-color 0.3s ease;
+  }
+
+  .animated-glow-button:hover:not(:disabled)::after {
+    background-color: #31c9ba; /* A slightly lighter, more vibrant hover color */
+  }
+
+  .animated-glow-button:disabled::before {
+    display: none;
+  }
+  
+  .animated-glow-button:disabled::after {
+    background-color: #9ca3af; /* gray-400 */
+  }
+  
+  .animated-glow-button:disabled {
+      color: #e5e7eb; /* gray-200 */
+  }
+
+  @keyframes rotate-glow {
+    from {
+      transform: translate(-50%, -50%) rotate(0deg);
+    }
+    to {
+      transform: translate(-50%, -50%) rotate(360deg);
+    }
+  }
+</style>
+</head>
+  <body class="text-brand-text font-sans antialiased">
+    <div id="root"></div>
+  </body>
+</html>
