@@ -30,3 +30,13 @@ export const saveTrip = (tripData: Omit<StoredTrip, 'id' | 'timestamp'>): void =
         console.error("Failed to save trip to local storage", error);
     }
 };
+
+export const deleteTrip = (tripId: string): void => {
+    try {
+        const existingTrips = getTrips();
+        const updatedTrips = existingTrips.filter(trip => trip.id !== tripId);
+        localStorage.setItem(TRIPS_STORAGE_KEY, JSON.stringify(updatedTrips));
+    } catch (error) {
+        console.error("Failed to delete trip from local storage", error);
+    }
+};
