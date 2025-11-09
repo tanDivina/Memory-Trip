@@ -1,5 +1,4 @@
-
-const BACKEND_URL = 'http://localhost:3001';
+const BACKEND_URL = 'https://backend-81532538916.us-central1.run.app';
 
 // A helper to handle fetch requests and errors consistently
 const fetchFromBackend = async (endpoint: string, body: object) => {
@@ -29,11 +28,11 @@ const fetchFromBackend = async (endpoint: string, body: object) => {
 };
 
 export const generateInitialImage = async (prompt: string): Promise<{ base64Image: string, mimeType: string }> => {
-    return fetchFromBackend('/api/generate-initial-image', { prompt });
+    return fetchFromBackend('/generate-initial-image', { prompt });
 };
 
 export const editImage = async (currentImageBase64: string, mimeType: string, itemPrompt: string): Promise<{ base64Image: string, mimeType: string }> => {
-    return fetchFromBackend('/api/edit-image', { 
+    return fetchFromBackend('/edit-image', { 
         currentImageBase64,
         mimeType,
         itemPrompt,
@@ -41,7 +40,7 @@ export const editImage = async (currentImageBase64: string, mimeType: string, it
 };
 
 export const getAIIdea = async (persona: string, location: string, items: string[]): Promise<string> => {
-   const data = await fetchFromBackend('/api/get-ai-idea', {
+   const data = await fetchFromBackend('/get-ai-idea', {
         persona,
         location,
         items,
@@ -50,7 +49,7 @@ export const getAIIdea = async (persona: string, location: string, items: string
 };
 
 export const getTripSummary = async (location: string, items: string[]): Promise<string> => {
-    const data = await fetchFromBackend('/api/get-trip-summary', {
+    const data = await fetchFromBackend('/get-trip-summary', {
         location,
         items,
     });
