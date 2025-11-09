@@ -7,7 +7,7 @@ import GameOverScreen from './components/GameOverScreen';
 import InfoModal from './components/InfoModal';
 import GalleryScreen from './components/GalleryScreen';
 import Tooltip from './components/Tooltip';
-import { generateInitialImage, editImage, getAIIdea, getTripSummary } from './services/geminiService';
+import { generateInitialImage, editImage, getAIIdea, getTripSummary, validateMemory } from './services/geminiService';
 import { GameState, GameSession, AddedBy, MemoryItem, GameMode } from './types';
 import { playTurnSuccess, playGameOver, playCorrectSound, setSoundEnabled } from './services/audioService';
 import { saveTrip } from './services/storageService';
@@ -77,7 +77,7 @@ const App: React.FC = () => {
           setTripSummary(summary);
         } catch (err) {
           console.error("Failed to generate trip summary:", err);
-          setTripSummary("The AI traveler was too tired to write a journal entry for this trip."); // Fallback
+          setTripSummary("The traveler was too tired to write a journal entry for this trip."); // Fallback
         } finally {
           setIsSummaryLoading(false);
         }
@@ -124,7 +124,11 @@ const App: React.FC = () => {
       setGameState(GameState.GAME);
     } catch (err) {
       console.error(err);
-      setError('Failed to generate the initial scene. Please try again.');
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('Failed to generate the initial scene. Please try again.');
+      }
     } finally {
       setIsLoading(false);
       setLoadingMessage('');
@@ -137,10 +141,10 @@ const App: React.FC = () => {
 
     // 1. Validate Memory (skip for Solo Mode)
     if (!isSoloMode) {
-        const existingItems = gameSession.items.map(i => i.text.toLowerCase());
-        const recalledItemsArray = recalledItems.split('\n').map(i => i.trim().toLowerCase()).filter(i => i);
+        const recalledItemsArray = recalledItems.split('\n').map(i => i.trim()).filter(i => i);
+        const actualItems = gameSession.items.map(i => i.text);
 
-        if (recalledItemsArray.length !== existingItems.length || !recalledItemsArray.every((item, index) => item === existingItems[index])) {
+        const failMemory = () => {
             let reason = '';
             if (gameSession.gameMode === GameMode.SINGLE_PLAYER) {
                 reason = "Your memory failed!";
@@ -157,7 +161,39 @@ const App: React.FC = () => {
             playGameOver();
             setGameOverReason(reason);
             setGameState(GameState.GAME_OVER);
+        };
+
+        // Quick check: if the number of items is wrong, fail immediately.
+        if (recalledItemsArray.length !== actualItems.length) {
+            failMemory();
             return;
+        }
+
+        // If there are items to check, use the AI service for semantic validation.
+        if (actualItems.length > 0) {
+            setIsLoading(true);
+            setLoadingMessage('Checking your memory...');
+            setError(null);
+            try {
+                const validationResult = await validateMemory(recalledItemsArray, actualItems);
+                if (!validationResult.correct) {
+                    failMemory();
+                    // Stop loading and return on failure
+                    setIsLoading(false);
+                    setLoadingMessage('');
+                    return;
+                }
+            } catch (err) {
+                console.error(err);
+                if (err instanceof Error) {
+                    setError(err.message);
+                } else {
+                    setError('An error occurred while checking your memory. Please try again.');
+                }
+                setIsLoading(false);
+                setLoadingMessage('');
+                return; // Stop the turn on validation error
+            }
         }
 
         // CORRECT RECALL! Celebrate.
@@ -243,7 +279,11 @@ const App: React.FC = () => {
       playTurnSuccess();
     } catch (err) {
       console.error(err);
-      setError('An error occurred while adding the item. Please try again.');
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('An error occurred while adding the item. Please try again.');
+      }
     } finally {
       setIsLoading(false);
       setLoadingMessage('');

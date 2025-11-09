@@ -54,9 +54,16 @@ const GalleryDetailModal: React.FC<GalleryDetailModalProps> = ({ trip, onClose }
 
   const handleDownload = () => {
     if (!postcardUrl) return;
+    
+    const sanitizedLocation = trip.location
+        .toLowerCase()
+        .replace(/\s+/g, '-') // Replace spaces with hyphens
+        .replace(/[^a-z0-9-]/g, '') // Remove invalid characters
+        .substring(0, 50); // Avoid overly long filenames
+
     const link = document.createElement('a');
     link.href = postcardUrl;
-    link.download = `memory-trip-${trip.id}.png`;
+    link.download = `memory-trip-${sanitizedLocation}.png`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -66,7 +73,13 @@ const GalleryDetailModal: React.FC<GalleryDetailModalProps> = ({ trip, onClose }
     if (!postcardUrl || !canShare) return;
     setIsInteracting(true);
     try {
-        const file = dataURLtoFile(postcardUrl, `memory-trip-${trip.id}.png`);
+        const sanitizedLocation = trip.location
+            .toLowerCase()
+            .replace(/\s+/g, '-') // Replace spaces with hyphens
+            .replace(/[^a-z0-9-]/g, '') // Remove invalid characters
+            .substring(0, 50); // Avoid overly long filenames
+
+        const file = dataURLtoFile(postcardUrl, `memory-trip-${sanitizedLocation}.png`);
         if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
             await navigator.share({
                 title: `My Memory Trip to ${trip.location}!`,
