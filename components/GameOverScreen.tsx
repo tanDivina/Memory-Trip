@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { GameSession, AddedBy, GameMode } from '../types';
 import Button from './Button';
 import Card from './Card';
@@ -33,9 +33,32 @@ const dataURLtoFile = (dataurl: string, filename: string): File | null => {
 const GameOverScreen: React.FC<GameOverScreenProps> = ({ session, onRestart, reason, tripSummary, isSummaryLoading }) => {
   const [isGeneratingPostcard, setIsGeneratingPostcard] = useState(false);
   const [isSharingPostcard, setIsSharingPostcard] = useState(false);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [animationFrameIndex, setAnimationFrameIndex] = useState(0);
+
   const canShare = typeof navigator.share === 'function';
   const isSoloMode = session.gameMode === GameMode.SOLO_MODE;
   let winnerText: string;
+
+  useEffect(() => {
+    if (!isAnimating || session.imageHistory.length <= 1) {
+      return;
+    }
+
+    const interval = setInterval(() => {
+      setAnimationFrameIndex(prevIndex => {
+        const nextIndex = prevIndex + 1;
+        if (nextIndex >= session.imageHistory.length) {
+            clearInterval(interval);
+            setIsAnimating(false); // Animation is done
+            return prevIndex; // Stay on the last frame
+        }
+        return nextIndex;
+      });
+    }, 1500); // 1.5 seconds per frame
+
+    return () => clearInterval(interval);
+  }, [isAnimating, session.imageHistory.length]);
 
   if (session.gameMode === GameMode.SINGLE_PLAYER) {
     winnerText = `The AI (${session.aiPersona || 'Opponent'}) wins!`;
@@ -65,6 +88,14 @@ const GameOverScreen: React.FC<GameOverScreenProps> = ({ session, onRestart, rea
     }
     winnerText = `Congratulations, ${winner}!`;
   }
+
+  const handleAnimateTrip = () => {
+    if (isAnimating) return; // Don't do anything if already animating
+    
+    // Reset to first frame and start animation
+    setAnimationFrameIndex(0);
+    setIsAnimating(true);
+  };
 
   const handleDownloadPostcard = async () => {
     if (!tripSummary) return;
@@ -126,13 +157,22 @@ const GameOverScreen: React.FC<GameOverScreenProps> = ({ session, onRestart, rea
     }
   };
 
+  const displayedImage = isAnimating 
+      ? session.imageHistory[animationFrameIndex] 
+      : session.currentImage;
+
+  const currentItem = (isAnimating && animationFrameIndex > 0) 
+      ? session.items[animationFrameIndex - 1] 
+      : null;
+
 
   return (
-    <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+    <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
       <div className="md:col-span-1 p-4 bg-white shadow-lg transform rotate-2">
         <div className="relative aspect-square w-full bg-brand-primary">
           <img
-            src={`data:${session.mimeType};base64,${session.currentImage}`}
+            key={animationFrameIndex}
+            src={`data:${session.mimeType};base64,${displayedImage}`}
             alt={session.basePrompt}
             className="w-full h-full object-cover"
           />
@@ -147,8 +187,15 @@ const GameOverScreen: React.FC<GameOverScreenProps> = ({ session, onRestart, rea
                     <path d="M12 22L14.5 17H9.5L12 22Z" fill="white"/>
                 </svg>
             </div>
+            {currentItem && (
+              <div key={animationFrameIndex} className="absolute inset-x-0 bottom-16 p-4 flex justify-center">
+                  <div className="bg-black bg-opacity-75 text-white text-lg font-semibold rounded-lg px-4 py-2 shadow-lg animate-fade-in-up">
+                  Added: "{currentItem.text}"
+                  </div>
+              </div>
+            )}
            <div className="absolute inset-x-0 bottom-0 p-4 pt-10 bg-gradient-to-t from-black/60 to-transparent">
-            <h3 className="text-white text-2xl font-bold font-display">The final scene!</h3>
+            <h3 className="text-white text-2xl font-bold font-display">{isAnimating ? `Step ${animationFrameIndex + 1} / ${session.imageHistory.length}` : 'The final scene!'}</h3>
           </div>
         </div>
       </div>
@@ -190,13 +237,22 @@ const GameOverScreen: React.FC<GameOverScreenProps> = ({ session, onRestart, rea
                 <p className="text-brand-text-muted italic whitespace-pre-wrap">{tripSummary}</p>
             )}
           </div>
-          <div className="flex flex-col sm:flex-row gap-4">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap sm:justify-center gap-4">
+             <Button
+                onClick={handleAnimateTrip}
+                disabled={session.items.length < 1 || isAnimating}
+                className="w-full"
+                variant="secondary"
+              >
+                {isAnimating ? 'Animating...' : 'Animate Trip'}
+            </Button>
             {canShare && (
                 <Button
                     onClick={handleSharePostcard}
                     disabled={isSummaryLoading || isGeneratingPostcard || isSharingPostcard || !tripSummary}
                     className="w-full"
                     variant="secondary"
+                    title="Opens your device's native share dialog to send to any app."
                 >
                     {isSharingPostcard ? 'Preparing...' : 'Share Postcard'}
                 </Button>

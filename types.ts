@@ -2,6 +2,7 @@ export enum GameState {
   START = 'START',
   GAME = 'GAME',
   GAME_OVER = 'GAME_OVER',
+  GALLERY = 'GALLERY',
 }
 
 export enum GameMode {
@@ -30,10 +31,21 @@ export interface GameSession {
   items: MemoryItem[];
   currentImage: string;
   mimeType: string;
+  imageHistory: string[];
   currentPlayer: AddedBy;
   gameMode: GameMode;
   aiPersona?: string; // Only for SINGLE_PLAYER mode
   turnEndsAt?: number; // Timestamp for when the current turn ends
+}
+
+export interface StoredTrip {
+  id: string;
+  timestamp: number;
+  location: string;
+  finalImage: string; // base64 image data
+  mimeType: string;
+  items: string[];
+  summary: string;
 }
 
 export const AIPersonas = [
@@ -42,4 +54,5 @@ export const AIPersonas = [
   'The Gloomy Poet',
   'The Sci-Fi Nerd',
   'The Culinary Enthusiast',
+  'Custom...',
 ];

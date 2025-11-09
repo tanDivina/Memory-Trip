@@ -43,7 +43,6 @@
     background-image: url('https://images.unsplash.com/photo-1542044896530-05d85be9b115?q=80&w=2940&auto=format&fit=crop');
     background-size: cover;
     background-position: center center;
-    background-attachment: fixed;
   }
   body::before {
     content: "";
@@ -58,22 +57,6 @@
   }
   
   /* --- ANIMATIONS --- */
-  
-  /* Title Animation */
-  .animated-title span {
-    display: inline-block;
-    position: relative;
-    animation: wave-text 1.8s ease-in-out infinite;
-  }
-
-  @keyframes wave-text {
-    0%, 100% {
-      transform: translateY(0);
-    }
-    50% {
-      transform: translateY(-10px);
-    }
-  }
 
   /* Button Glow Animation */
   .animated-glow-button {
@@ -89,12 +72,19 @@
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    width: 150%;
-    aspect-ratio: 1/1;
-    background: conic-gradient(from 180deg at 50% 50%, #26a69a 0deg, #84e1d8 180deg, #26a69a 360deg);
+    width: calc(100% + 6px); /* 3px glow on each side */
+    height: calc(100% + 6px); /* 3px glow on each side */
+    background: conic-gradient(
+        from 0deg at 50% 50%,
+        transparent 0 270deg,
+        #84e1d8 300deg, /* Bright teal "comet head" */
+        transparent 360deg
+    );
     z-index: -2;
-    border-radius: 0.5rem; /* 8px, matches rounded-lg */
-    animation: rotate-glow 4s linear infinite;
+    border-radius: 12px; /* Button is rounded-lg (8px), so this is slightly larger */
+    animation: rotate-glow 4s linear infinite; /* Slower animation */
+    filter: blur(8px); /* Softer blur */
+    opacity: 0.7; /* Less intense */
   }
 
   .animated-glow-button::after {
@@ -130,6 +120,28 @@
     to {
       transform: translate(-50%, -50%) rotate(360deg);
     }
+  }
+
+  @keyframes fade-in-up {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  .animate-fade-in-up {
+    animation: fade-in-up 0.5s ease-out forwards;
+  }
+
+  .clamp-3-lines {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
   }
 </style>
 </head>

@@ -83,10 +83,18 @@ const GameScreen: React.FC<GameScreenProps> = ({ session, onTakeTurn, onReset, o
   const [isSpeechSupported, setIsSpeechSupported] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(60);
   const [isJournalOpen, setIsJournalOpen] = useState(false);
+  const [hint, setHint] = useState<string | null>(null);
+  const [hintUsed, setHintUsed] = useState<boolean>(false);
 
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const speechTargetRef = useRef(speechTarget);
   const isSoloMode = session.gameMode === GameMode.SOLO_MODE;
+
+  useEffect(() => {
+    // Reset hint state whenever the turn changes (indicated by player or item list length changing)
+    setHint(null);
+    setHintUsed(false);
+  }, [session.currentPlayer, session.items.length]);
 
   useEffect(() => {
     speechTargetRef.current = speechTarget;
@@ -177,6 +185,20 @@ const GameScreen: React.FC<GameScreenProps> = ({ session, onTakeTurn, onReset, o
       }
     }
   };
+
+  const handleRequestHint = () => {
+    if (hintUsed || session.items.length === 0) return;
+
+    // Determine the next item's hint based on how many items the user has already typed.
+    const recalledSoFar = recalledItems.split('\n').map(i => i.trim()).filter(i => i);
+    const nextItemIndex = recalledSoFar.length;
+
+    if (nextItemIndex < session.items.length) {
+      const nextItem = session.items[nextItemIndex];
+      setHint(`The next item starts with: ${nextItem.text.charAt(0).toUpperCase()}`);
+      setHintUsed(true);
+    }
+  };
   
   let turnTitle: string;
   if (isSoloMode) {
@@ -260,27 +282,32 @@ const GameScreen: React.FC<GameScreenProps> = ({ session, onTakeTurn, onReset, o
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {!isSoloMode && session.items.length > 0 && (
-              <div className="relative">
-                <textarea
-                  value={recalledItems}
-                  onChange={(e) => setRecalledItems(e.target.value)}
-                  placeholder="First, recall all the items added so far, each on a new line..."
-                  rows={session.items.length}
-                  disabled={isLoading}
-                  className={`w-full bg-brand-bg border border-brand-primary rounded-lg px-4 py-3 text-brand-text placeholder-brand-text-muted focus:outline-none focus:ring-2 focus:ring-brand-secondary transition-shadow duration-200 ${isSpeechSupported ? 'pr-12' : ''}`}
-                />
-                {isSpeechSupported && (
-                  <button
-                    type="button"
-                    onClick={() => handleMicToggle('recalled')}
+              <div>
+                <div className="relative">
+                    <textarea
+                    value={recalledItems}
+                    onChange={(e) => setRecalledItems(e.target.value)}
+                    placeholder="First, recall all the items added so far, each on a new line..."
+                    rows={session.items.length}
                     disabled={isLoading}
-                    className={`absolute top-3 right-0 flex items-center justify-center w-12 text-brand-text-muted hover:text-brand-text transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50 ${isListening && speechTarget === 'recalled' ? 'text-brand-secondary' : ''}`}
-                    aria-label={isListening && speechTarget === 'recalled' ? 'Stop listening' : 'Start listening to recall items'}
-                  >
-                    <svg className={`w-6 h-6 ${isListening && speechTarget === 'recalled' ? 'animate-pulse' : ''}`} fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                      <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8h-1a6 6 0 11-12 0H3a7.001 7.001 0 006 6.93V17H7v1h6v-1h-2v-2.07z" clipRule="evenodd"></path>
-                    </svg>
-                  </button>
+                    className={`w-full bg-brand-bg border border-brand-primary rounded-lg px-4 py-3 text-brand-text placeholder-brand-text-muted focus:outline-none focus:ring-2 focus:ring-brand-secondary transition-shadow duration-200 ${isSpeechSupported ? 'pr-12' : ''}`}
+                    />
+                    {isSpeechSupported && (
+                    <button
+                        type="button"
+                        onClick={() => handleMicToggle('recalled')}
+                        disabled={isLoading}
+                        className={`absolute top-3 right-0 flex items-center justify-center w-12 text-brand-text-muted hover:text-brand-text transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50 ${isListening && speechTarget === 'recalled' ? 'text-brand-secondary' : ''}`}
+                        aria-label={isListening && speechTarget === 'recalled' ? 'Stop listening' : 'Start listening to recall items'}
+                    >
+                        <svg className={`w-6 h-6 ${isListening && speechTarget === 'recalled' ? 'animate-pulse' : ''}`} fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                        <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8h-1a6 6 0 11-12 0H3a7.001 7.001 0 006 6.93V17H7v1h6v-1h-2v-2.07z" clipRule="evenodd"></path>
+                        </svg>
+                    </button>
+                    )}
+                </div>
+                {hint && (
+                  <p className="text-center text-brand-secondary font-semibold animate-fade-in-up mt-2">{hint}</p>
                 )}
               </div>
             )}
@@ -307,9 +334,23 @@ const GameScreen: React.FC<GameScreenProps> = ({ session, onTakeTurn, onReset, o
                   </button>
               )}
             </div>
-            <Button type="submit" disabled={isLoading || !newItem.trim()}>
-                {isSoloMode ? 'Add Item' : 'Take Turn'}
-            </Button>
+             <div className="flex flex-col sm:flex-row gap-4">
+                <Button type="submit" disabled={isLoading || !newItem.trim()} className="flex-grow">
+                    {isSoloMode ? 'Add Item' : 'Take Turn'}
+                </Button>
+                {!isSoloMode && session.items.length > 0 && (
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={handleRequestHint}
+                        disabled={isLoading || hintUsed || (recalledItems.split('\n').filter(i => i.trim()).length >= session.items.length)}
+                        className="flex-grow sm:flex-grow-0"
+                        title="Get the first letter of the next item. One per turn!"
+                    >
+                        {hintUsed ? 'Hint Used' : 'Need a Hint?'}
+                    </Button>
+                )}
+             </div>
             {error && <p className="mt-4 text-center text-red-400">{error}</p>}
           </form>
         </div>
