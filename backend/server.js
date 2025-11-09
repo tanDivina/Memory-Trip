@@ -5,7 +5,7 @@ import cors from 'cors';
 import 'dotenv/config'; // Loads variables from .env file
 
 const app = express();
-const port = 3001; // You can use any port that's not in use
+const port = process.env.PORT || 3001; // You can use any port that's not in use
 
 // Middleware
 app.use(cors()); // Allow requests from your frontend
