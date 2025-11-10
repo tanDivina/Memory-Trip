@@ -63,7 +63,10 @@ const InfoModal: React.FC<InfoModalProps> = ({ isOpen, onClose }) => {
               <h3 className="text-xl font-bold font-display mb-2 text-brand-secondary">Game Modes</h3>
               <ul className="space-y-3">
                 <li>
-                  <strong className="font-semibold">Multiplayer (2-4 Players):</strong> A classic "pass-and-play" memory challenge. Take turns with friends by passing the device to each other. If someone's memory fails, the other players win!
+                  <strong className="font-semibold">Online Multiplayer:</strong> Create a game lobby and invite up to 3 friends using a unique game code. Play in real-time from anywhere, on any device!
+                </li>
+                <li>
+                  <strong className="font-semibold">Local Multiplayer (2-4 Players):</strong> A classic "pass-and-play" memory challenge. Take turns with friends on a single device. If someone's memory fails, the other players win!
                 </li>
                 <li>
                   <strong className="font-semibold">Just Me Against AI:</strong> Test your memory against an AI opponent. The AI has a unique persona and will try to trip you up with its creative additions. Can you outlast the machine?

@@ -1,13 +1,17 @@
 
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import StartScreen from './components/StartScreen';
 import GameScreen from './components/GameScreen';
 import GameOverScreen from './components/GameOverScreen';
 import InfoModal from './components/InfoModal';
 import GalleryScreen from './components/GalleryScreen';
 import Tooltip from './components/Tooltip';
-import { generateInitialImage, editImage, getAIIdea, getTripSummary } from './services/geminiService';
+import LobbyScreen from './components/LobbyScreen';
+import { 
+  generateInitialImage, editImage, getAIIdea, getTripSummary, validateMemory,
+  createOnlineGame, joinOnlineGame, getGameState, startGame, submitOnlineTurn 
+} from './services/geminiService';
 import { GameState, GameSession, AddedBy, MemoryItem, GameMode } from './types';
 import { playTurnSuccess, playGameOver, playCorrectSound, setSoundEnabled } from './services/audioService';
 import { saveTrip } from './services/storageService';
@@ -19,6 +23,7 @@ const titleColors = ['#26a69a', '#d96666', '#5e9ed6', '#d9a057', '#6fbf73', '#b3
 const App: React.FC = () => {
   const [gameState, setGameState] = useState<GameState>(GameState.START);
   const [gameSession, setGameSession] = useState<GameSession | null>(null);
+  const [playerId, setPlayerId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [loadingMessage, setLoadingMessage] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
@@ -28,6 +33,9 @@ const App: React.FC = () => {
   const [isSummaryLoading, setIsSummaryLoading] = useState<boolean>(false);
   const [isInfoModalOpen, setIsInfoModalOpen] = useState<boolean>(false);
   const [isSoundEnabled, setIsSoundEnabled] = useState<boolean>(true);
+  const [initialJoinCode, setInitialJoinCode] = useState<string | null>(null);
+  const pollingIntervalRef = useRef<number | null>(null);
+
 
   useEffect(() => {
     setSoundEnabled(isSoundEnabled);
@@ -36,21 +44,69 @@ const App: React.FC = () => {
   useEffect(() => {
     const handleScroll = () => {
       const offset = window.pageYOffset;
-      // Apply a parallax effect by moving the background at half the scroll speed
       document.body.style.backgroundPositionY = `${offset * 0.5}px`;
     };
-
     window.addEventListener('scroll', handleScroll);
-
     return () => {
       window.removeEventListener('scroll', handleScroll);
-      // Reset the style when the component unmounts to avoid side effects
       document.body.style.backgroundPositionY = '';
     };
   }, []);
 
+  // Check for join game link on initial load
   useEffect(() => {
-    if (gameState !== GameState.GAME || !gameSession?.turnEndsAt || isLoading || gameSession.gameMode === GameMode.SOLO_MODE) {
+    const urlParams = new URLSearchParams(window.location.search);
+    const gameCode = urlParams.get('joinGame');
+    if (gameCode) {
+      setInitialJoinCode(gameCode.toUpperCase());
+      // Clean the URL so it doesn't persist on refresh if the user navigates away
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
+
+  // Polling effect for online games
+  useEffect(() => {
+    const stopPolling = () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+    };
+  
+    if (gameSession?.gameCode && (gameState === GameState.LOBBY || (gameState === GameState.GAME && gameSession.gameMode === GameMode.ONLINE))) {
+      pollingIntervalRef.current = window.setInterval(async () => {
+        try {
+          const { gameState: serverState, gameStatus } = await getGameState(gameSession.gameCode!);
+          
+          if (gameStatus === 'active') {
+             // If the game has started server-side, move the local state to GAME
+             if (gameState === GameState.LOBBY) {
+                setGameState(GameState.GAME);
+             }
+             setGameSession(serverState);
+          } else if (gameStatus === 'lobby') {
+            setGameSession(serverState);
+          } else if (gameStatus === 'finished') {
+            setGameSession(serverState);
+            setGameOverReason(serverState.gameOverReason);
+            setGameState(GameState.GAME_OVER);
+            stopPolling();
+          }
+        } catch (err) {
+          console.error("Polling error:", err);
+          setError("Lost connection to the game server.");
+          stopPolling();
+        }
+      }, 3000); // Poll every 3 seconds
+    }
+  
+    // Cleanup interval when the effect dependencies change
+    return stopPolling;
+  }, [gameState, gameSession?.gameCode, gameSession?.gameMode]);
+
+
+  useEffect(() => {
+    if (gameState !== GameState.GAME || !gameSession?.turnEndsAt || isLoading || gameSession.gameMode === GameMode.SOLO_MODE || gameSession.gameMode === GameMode.ONLINE) {
       return;
     }
 
@@ -77,7 +133,7 @@ const App: React.FC = () => {
           setTripSummary(summary);
         } catch (err) {
           console.error("Failed to generate trip summary:", err);
-          setTripSummary("The AI traveler was too tired to write a journal entry for this trip."); // Fallback
+          setTripSummary("The AI traveler was too tired to write a journal entry for this trip.");
         } finally {
           setIsSummaryLoading(false);
         }
@@ -86,12 +142,9 @@ const App: React.FC = () => {
     }
   }, [gameState, gameSession, isSummaryLoading, tripSummary]);
 
-  // This new effect saves the trip once the summary is ready
   useEffect(() => {
       if (gameState === GameState.GAME_OVER && gameSession && tripSummary) {
-          // Don't save if it was just a fallback summary from a failed API call and no items were added.
           if (gameSession.items.length === 0) return;
-
           saveTrip({
               location: gameSession.basePrompt,
               finalImage: gameSession.currentImage,
@@ -100,47 +153,123 @@ const App: React.FC = () => {
               summary: tripSummary,
           });
       }
-  }, [tripSummary, gameState, gameSession]); // This will run only when tripSummary changes from null to a string.
+  }, [tripSummary, gameState, gameSession]);
 
 
-  const handleStartGame = useCallback(async (destination: string, gameMode: GameMode, aiPersona?: string) => {
+  const handleStart = useCallback(async (config: {
+    type: 'local' | 'create_online' | 'join_online';
+    destination?: string;
+    gameMode?: GameMode;
+    aiPersona?: string;
+    gameCode?: string;
+  }) => {
     setIsLoading(true);
-    setLoadingMessage('Finding your destination...');
     setError(null);
     try {
-      const { base64Image, mimeType } = await generateInitialImage(destination);
-      const isSoloMode = gameMode === GameMode.SOLO_MODE;
-      setGameSession({
-        basePrompt: destination,
-        items: [],
-        currentImage: base64Image,
-        mimeType: mimeType,
-        imageHistory: [base64Image],
-        currentPlayer: AddedBy.PLAYER_1,
-        gameMode: gameMode,
-        aiPersona: gameMode === GameMode.SINGLE_PLAYER ? aiPersona : undefined,
-        turnEndsAt: isSoloMode ? undefined : Date.now() + TURN_DURATION_MS,
-      });
-      setGameState(GameState.GAME);
+        if (config.type === 'local' && config.destination) {
+            setLoadingMessage('Finding your destination...');
+            const { base64Image, mimeType } = await generateInitialImage(config.destination);
+            const isSoloMode = config.gameMode === GameMode.SOLO_MODE;
+            setGameSession({
+                basePrompt: config.destination,
+                items: [],
+                currentImage: base64Image,
+                mimeType: mimeType,
+                imageHistory: [base64Image],
+                currentPlayer: AddedBy.PLAYER_1,
+                gameMode: config.gameMode!,
+                aiPersona: config.gameMode === GameMode.SINGLE_PLAYER ? config.aiPersona : undefined,
+                turnEndsAt: isSoloMode ? undefined : Date.now() + TURN_DURATION_MS,
+            });
+            setGameState(GameState.GAME);
+        } else if (config.type === 'create_online' && config.destination) {
+            setLoadingMessage('Creating online game...');
+            const playerName = `Player ${Math.floor(Math.random() * 900) + 100}`;
+            const { playerId, gameState: initialState } = await createOnlineGame(config.destination, playerName);
+            setPlayerId(playerId);
+            setGameSession(initialState);
+            setGameState(GameState.LOBBY);
+        } else if (config.type === 'join_online' && config.gameCode) {
+            setLoadingMessage(`Joining game ${config.gameCode}...`);
+            const playerName = `Player ${Math.floor(Math.random() * 900) + 100}`;
+            const { playerId, gameState: initialState } = await joinOnlineGame(config.gameCode, playerName);
+            setPlayerId(playerId);
+            setGameSession(initialState);
+            if (initialState.gameStatus === 'active') {
+                setGameState(GameState.GAME);
+            } else {
+                setGameState(GameState.LOBBY);
+            }
+        }
     } catch (err) {
-      console.error(err);
-      setError('Failed to generate the initial scene. Please try again.');
+        console.error(err);
+        if (err instanceof Error) {
+            setError(err.message);
+        } else {
+            setError('An unknown error occurred. Please try again.');
+        }
     } finally {
-      setIsLoading(false);
-      setLoadingMessage('');
+        setIsLoading(false);
+        setLoadingMessage('');
     }
   }, []);
+
+  const handleStartOnlineGame = useCallback(async () => {
+    if (!gameSession?.gameCode || !playerId) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+      await startGame(gameSession.gameCode, playerId);
+      // Polling will handle the state transition
+    } catch (err) {
+      console.error(err);
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('Failed to start the game.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, [gameSession, playerId]);
 
   const handlePlayerTurn = useCallback(async (recalledItems: string, newItem: string) => {
     if (!gameSession) return;
     const isSoloMode = gameSession.gameMode === GameMode.SOLO_MODE;
+    const isOnlineMode = gameSession.gameMode === GameMode.ONLINE;
+
+    // Online turn submission
+    if (isOnlineMode) {
+        if (!gameSession.gameCode || !playerId) return;
+        setIsLoading(true);
+        setLoadingMessage('Submitting your turn...');
+        setError(null);
+        try {
+            const recalledItemsArray = recalledItems.split('\n').map(i => i.trim()).filter(i => i);
+            await submitOnlineTurn(gameSession.gameCode, playerId, recalledItemsArray, newItem);
+            // Polling will update the game state
+        } catch (err) {
+            console.error(err);
+            if (err instanceof Error) {
+                setError(err.message);
+            } else {
+                setError('Failed to submit your turn.');
+            }
+        } finally {
+            setIsLoading(false);
+            setLoadingMessage('');
+        }
+        return;
+    }
+
+    // --- Local Game Turn Logic ---
 
     // 1. Validate Memory (skip for Solo Mode)
     if (!isSoloMode) {
-        const existingItems = gameSession.items.map(i => i.text.toLowerCase());
-        const recalledItemsArray = recalledItems.split('\n').map(i => i.trim().toLowerCase()).filter(i => i);
+        const recalledItemsArray = recalledItems.split('\n').map(i => i.trim()).filter(i => i);
+        const actualItems = gameSession.items.map(i => i.text);
 
-        if (recalledItemsArray.length !== existingItems.length || !recalledItemsArray.every((item, index) => item === existingItems[index])) {
+        const failMemory = () => {
             let reason = '';
             if (gameSession.gameMode === GameMode.SINGLE_PLAYER) {
                 reason = "Your memory failed!";
@@ -157,14 +286,39 @@ const App: React.FC = () => {
             playGameOver();
             setGameOverReason(reason);
             setGameState(GameState.GAME_OVER);
+        };
+
+        if (recalledItemsArray.length !== actualItems.length) {
+            failMemory();
             return;
         }
 
-        // CORRECT RECALL! Celebrate.
-        if (gameSession.items.length > 0) { // Don't show on first turn
+        if (actualItems.length > 0) {
+            setIsLoading(true);
+            setLoadingMessage('Checking your memory...');
+            setError(null);
+            try {
+                const validationResult = await validateMemory(recalledItemsArray, actualItems);
+                if (!validationResult.correct) {
+                    failMemory();
+                    setIsLoading(false);
+                    setLoadingMessage('');
+                    return;
+                }
+            } catch (err) {
+                console.error(err);
+                if (err instanceof Error) { setError(err.message); } 
+                else { setError('An error occurred while checking your memory.'); }
+                setIsLoading(false);
+                setLoadingMessage('');
+                return;
+            }
+        }
+
+        if (gameSession.items.length > 0) {
             setShowCorrectMessage(true);
             playCorrectSound();
-            await new Promise(resolve => setTimeout(resolve, 1500)); // Pause for celebration
+            await new Promise(resolve => setTimeout(resolve, 1500));
             setShowCorrectMessage(false);
         }
     }
@@ -187,18 +341,10 @@ const App: React.FC = () => {
         imageHistory: historyAfterPlayer,
       };
 
-      // 3. Handle next turn based on game mode
       if (gameSession.gameMode === GameMode.SINGLE_PLAYER && gameSession.aiPersona) {
         setLoadingMessage(`AI (${gameSession.aiPersona}) is thinking...`);
-        
-        const aiItemIdea = await getAIIdea(
-            gameSession.aiPersona, 
-            gameSession.basePrompt, 
-            newPlayerItems.map(i => i.text)
-        );
-        
+        const aiItemIdea = await getAIIdea(gameSession.aiPersona, gameSession.basePrompt, newPlayerItems.map(i => i.text));
         setLoadingMessage(`AI is adding "${aiItemIdea}"...`);
-
         const aiImageResult = await editImage(playerImageResult.base64Image, playerImageResult.mimeType, aiItemIdea);
         const newAiItems: MemoryItem[] = [...newPlayerItems, { text: aiItemIdea, addedBy: AddedBy.AI }];
         const historyAfterAI = [...historyAfterPlayer, aiImageResult.base64Image];
@@ -211,44 +357,30 @@ const App: React.FC = () => {
             imageHistory: historyAfterAI,
             turnEndsAt: Date.now() + TURN_DURATION_MS,
         });
-
-      } else if (
-        // Fix: Removed redundant comments.
-        gameSession.gameMode === GameMode.TWO_PLAYER ||
-        gameSession.gameMode === GameMode.THREE_PLAYER ||
-        gameSession.gameMode === GameMode.FOUR_PLAYER
-      ) {
+      } else if ( [GameMode.TWO_PLAYER, GameMode.THREE_PLAYER, GameMode.FOUR_PLAYER].includes(gameSession.gameMode) ) {
         const turnOrderMap: Record<string, AddedBy[]> = {
             [GameMode.TWO_PLAYER]: [AddedBy.PLAYER_1, AddedBy.PLAYER_2],
             [GameMode.THREE_PLAYER]: [AddedBy.PLAYER_1, AddedBy.PLAYER_2, AddedBy.PLAYER_3],
             [GameMode.FOUR_PLAYER]: [AddedBy.PLAYER_1, AddedBy.PLAYER_2, AddedBy.PLAYER_3, AddedBy.PLAYER_4],
         };
-    
-        // Fix: Removed redundant comment.
         const turnOrder = turnOrderMap[gameSession.gameMode];
         const currentPlayerIndex = turnOrder.indexOf(gameSession.currentPlayer);
         const nextPlayerIndex = (currentPlayerIndex + 1) % turnOrder.length;
         const nextPlayer = turnOrder[nextPlayerIndex];
-
-        setGameSession({
-            ...sessionAfterPlayerTurn,
-            currentPlayer: nextPlayer,
-            turnEndsAt: Date.now() + TURN_DURATION_MS,
-        });
+        setGameSession({ ...sessionAfterPlayerTurn, currentPlayer: nextPlayer, turnEndsAt: Date.now() + TURN_DURATION_MS });
       } else { // Solo Mode
         setGameSession(sessionAfterPlayerTurn);
       }
-
-
       playTurnSuccess();
     } catch (err) {
       console.error(err);
-      setError('An error occurred while adding the item. Please try again.');
+      if (err instanceof Error) { setError(err.message); } 
+      else { setError('An error occurred while adding the item.'); }
     } finally {
       setIsLoading(false);
       setLoadingMessage('');
     }
-  }, [gameSession]);
+  }, [gameSession, playerId]);
 
   const handleFinishTrip = useCallback(() => {
     setGameState(GameState.GAME_OVER);
@@ -258,6 +390,7 @@ const App: React.FC = () => {
   const handleResetGame = useCallback(() => {
     setGameState(GameState.START);
     setGameSession(null);
+    setPlayerId(null);
     setError(null);
     setGameOverReason('');
     setShowCorrectMessage(false);
@@ -272,11 +405,30 @@ const App: React.FC = () => {
   const renderGameState = () => {
     switch(gameState) {
       case GameState.START:
-        return <StartScreen onStart={handleStartGame} onShowGallery={handleShowGallery} isLoading={isLoading} loadingMessage={loadingMessage} error={error} />;
+        return <StartScreen 
+                  onStart={handleStart} 
+                  onShowGallery={handleShowGallery} 
+                  isLoading={isLoading} 
+                  loadingMessage={loadingMessage} 
+                  error={error}
+                  initialJoinCode={initialJoinCode} 
+                />;
+      case GameState.LOBBY:
+        if (gameSession && playerId) {
+          return <LobbyScreen 
+            gameCode={gameSession.gameCode!}
+            players={gameSession.players || []}
+            isHost={gameSession.hostId === playerId}
+            onStartGame={handleStartOnlineGame}
+            isLoading={isLoading}
+          />;
+        }
+        return null;
       case GameState.GAME:
         if (gameSession) {
           return <GameScreen 
             session={gameSession} 
+            playerId={playerId}
             onTakeTurn={handlePlayerTurn} 
             onReset={handleResetGame} 
             onFinishTrip={handleFinishTrip}
@@ -301,7 +453,7 @@ const App: React.FC = () => {
        case GameState.GALLERY:
         return <GalleryScreen onBack={handleResetGame} />;
       default:
-        return <StartScreen onStart={handleStartGame} onShowGallery={handleShowGallery} isLoading={isLoading} loadingMessage={loadingMessage} error={error} />;
+        return <StartScreen onStart={handleStart} onShowGallery={handleShowGallery} isLoading={isLoading} loadingMessage={loadingMessage} error={error} />;
     }
   }
 
@@ -327,7 +479,6 @@ const App: React.FC = () => {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
                 </svg>
               ) : (
-                // Fix: Replaced truncated SVG path with a valid path for a "mute" icon.
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
                     <path strokeLinecap="round" strokeLinejoin="round" d="M17 9l-6 6m0-6l6 6" />
@@ -355,5 +506,4 @@ const App: React.FC = () => {
   );
 };
 
-// Fix: Add default export to make the component available for import.
 export default App;
