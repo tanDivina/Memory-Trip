@@ -108,15 +108,9 @@ const GameOverScreen: React.FC<GameOverScreenProps> = ({ session, onRestart, rea
             location: session.basePrompt,
         });
 
-        const sanitizedLocation = session.basePrompt
-            .toLowerCase()
-            .replace(/\s+/g, '-') // Replace spaces with hyphens
-            .replace(/[^a-z0-9-]/g, '') // Remove invalid characters
-            .substring(0, 50); // Avoid overly long filenames
-
         const link = document.createElement('a');
         link.href = postcardDataUrl;
-        link.download = `memory-trip-${sanitizedLocation}.png`;
+        link.download = 'memory-trip-postcard.png';
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -138,14 +132,8 @@ const GameOverScreen: React.FC<GameOverScreenProps> = ({ session, onRestart, rea
             items: session.items.map(item => item.text),
             location: session.basePrompt,
         });
-        
-        const sanitizedLocation = session.basePrompt
-            .toLowerCase()
-            .replace(/\s+/g, '-') // Replace spaces with hyphens
-            .replace(/[^a-z0-9-]/g, '') // Remove invalid characters
-            .substring(0, 50); // Avoid overly long filenames
 
-        const postcardFile = dataURLtoFile(postcardDataUrl, `memory-trip-${sanitizedLocation}.png`);
+        const postcardFile = dataURLtoFile(postcardDataUrl, 'memory-trip-postcard.png');
 
         if (postcardFile && navigator.canShare && navigator.canShare({ files: [postcardFile] })) {
             await navigator.share({

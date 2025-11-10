@@ -44,70 +44,38 @@ function wrapText(
     return currentY + lineHeight;
 }
 
-
-/**
- * A helper function to fit text into a max width by reducing font size.
- */
-function fitTextOnCanvas(
-    context: CanvasRenderingContext2D,
-    text: string,
-    fontFace: string,
-    maxWidth: number,
-    initialSize: number,
-    x: number,
-    y: number
-) {
-    let fontSize = initialSize;
-    context.textAlign = 'left';
-    do {
-        // We use 'bold' as the title was bold before.
-        context.font = `bold ${fontSize}px ${fontFace}`;
-        if (context.measureText(text).width <= maxWidth) {
-            break;
-        }
-        fontSize -= 2; // Decrement font size
-    } while (fontSize > 18); // Don't let the font get too small
-
-    context.fillText(text, x, y);
-}
-
-
 export const generatePostcard = (options: PostcardOptions): Promise<string> => {
     return new Promise((resolve, reject) => {
-        // The items are no longer displayed, but we destructure to avoid unused variable errors.
-        const { finalImageSrc, summary, location } = options;
+        const { finalImageSrc, summary, items, location } = options;
 
         const canvas = document.createElement('canvas');
-        const PADDING = 80;
-        const POSTCARD_WIDTH = 1800;
-        const POSTCARD_HEIGHT = 1200;
+        const PADDING = 60;
+        const IMAGE_SIZE = 1024;
+        const TEXT_AREA_HEIGHT = 716;
         
-        canvas.width = POSTCARD_WIDTH;
-        canvas.height = POSTCARD_HEIGHT;
+        canvas.width = IMAGE_SIZE + PADDING * 2;
+        canvas.height = IMAGE_SIZE + TEXT_AREA_HEIGHT + PADDING * 2;
         
         const ctx = canvas.getContext('2d');
         if (!ctx) {
             return reject(new Error('Could not get canvas context'));
         }
 
-        // 1. Draw postcard background
+        // 1. Draw background
         ctx.fillStyle = '#f5f1e8'; // brand-bg
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // 2. Load and draw the final image on the left side
+        // 2. Load and draw the final image
         const img = new Image();
         img.crossOrigin = 'anonymous';
         img.onload = () => {
-            const IMAGE_AREA_WIDTH = POSTCARD_WIDTH / 2 - PADDING - (PADDING / 4);
-            const IMAGE_AREA_HEIGHT = POSTCARD_HEIGHT - (PADDING * 2);
-
             // Draw a subtle border/shadow for the image
             ctx.shadowColor = 'rgba(0, 0, 0, 0.2)';
             ctx.shadowBlur = 20;
             ctx.shadowOffsetX = 5;
             ctx.shadowOffsetY = 10;
             
-            ctx.drawImage(img, PADDING, PADDING, IMAGE_AREA_WIDTH, IMAGE_AREA_HEIGHT);
+            ctx.drawImage(img, PADDING, PADDING, IMAGE_SIZE, IMAGE_SIZE);
             
             // Reset shadow for text
             ctx.shadowColor = 'transparent';
@@ -115,33 +83,32 @@ export const generatePostcard = (options: PostcardOptions): Promise<string> => {
             ctx.shadowOffsetX = 0;
             ctx.shadowOffsetY = 0;
 
-            // 3. Draw a vertical dividing line
-            const dividerX = PADDING + IMAGE_AREA_WIDTH + (PADDING / 2);
-            ctx.strokeStyle = '#d1ccc1'; // A light gray
-            ctx.lineWidth = 2;
-            ctx.setLineDash([10, 10]);
-            ctx.beginPath();
-            ctx.moveTo(dividerX, PADDING);
-            ctx.lineTo(dividerX, POSTCARD_HEIGHT - PADDING);
-            ctx.stroke();
-            ctx.setLineDash([]); // Reset line dash
+            // 3. Draw text content
+            const textX = PADDING;
+            const textY = PADDING + IMAGE_SIZE + 80;
+            const textAreaWidth = canvas.width - (PADDING * 2);
 
-
-            // 4. Draw text content on the right side
-            const textX = dividerX + (PADDING / 2);
-            const textY = PADDING + 100; // Start title lower
-            const textAreaWidth = POSTCARD_WIDTH - textX - PADDING;
-
-            // Title - using the new fitText helper
+            // Title
             ctx.fillStyle = '#3a3a3a'; // brand-text
-            fitTextOnCanvas(ctx, `Greetings from ${location}!`, 'Kalam, cursive', textAreaWidth, 90, textX, textY);
+            ctx.font = 'bold 64px Kalam, cursive';
+            ctx.textAlign = 'center';
+            ctx.fillText(`Greetings from ${location}!`, canvas.width / 2, textY);
             
             // Journal Entry
-            ctx.font = '36px Kalam, cursive';
-            const journalY = textY + 160;
-            wrapText(ctx, `"${summary}"`, textX, journalY, textAreaWidth, 48);
+            ctx.textAlign = 'left';
+            ctx.font = '32px Kalam, cursive';
+            const journalY = textY + 80;
+            const summaryFinalY = wrapText(ctx, `"${summary}"`, textX, journalY, textAreaWidth, 40);
 
-            // 5. The item list is no longer rendered.
+            // Item List
+            const listY = summaryFinalY + 40;
+            ctx.font = '32px Kalam, cursive';
+            let currentListY = listY;
+            items.forEach((item, index) => {
+                const text = `${index + 1}. ${item}`;
+                ctx.fillText(text, textX, currentListY);
+                currentListY += 40;
+            });
             
             resolve(canvas.toDataURL('image/png'));
         };

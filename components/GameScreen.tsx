@@ -1,61 +1,14 @@
 
-
-
 import React, { useState, useEffect, useRef } from 'react';
-import { GameSession, AddedBy, GameMode, Player } from '../types';
+import { GameSession, AddedBy, GameMode } from '../types';
 import Button from './Button';
 import Input from './Input';
 import Card from './Card';
 import Spinner from './Spinner';
 import { playTimerWarning } from '../services/audioService';
 
-// Fix: Add type definitions for Web Speech API as they are not included in default TS DOM typings.
-interface SpeechRecognition {
-    continuous: boolean;
-    lang: string;
-    interimResults: boolean;
-    maxAlternatives: number;
-    onresult: (event: SpeechRecognitionEvent) => void;
-    onerror: (event: SpeechRecognitionErrorEvent) => void;
-    onend: () => void;
-    start: () => void;
-    stop: () => void;
-    abort: () => void;
-}
-
-interface SpeechRecognitionEvent extends Event {
-    readonly results: SpeechRecognitionResultList;
-}
-
-interface SpeechRecognitionResultList {
-    readonly length: number;
-    [index: number]: SpeechRecognitionResult;
-}
-
-interface SpeechRecognitionResult {
-    readonly length: number;
-    [index: number]: SpeechRecognitionAlternative;
-}
-
-interface SpeechRecognitionAlternative {
-    readonly transcript: string;
-}
-
-interface SpeechRecognitionErrorEvent extends Event {
-    readonly error: string;
-}
-
-declare var SpeechRecognition: {
-    new(): SpeechRecognition;
-};
-
-declare var webkitSpeechRecognition: {
-    new(): SpeechRecognition;
-};
-
 interface GameScreenProps {
   session: GameSession;
-  playerId: string | null;
   onTakeTurn: (recalledItems: string, newItem: string) => void;
   onReset: () => void;
   onFinishTrip: () => void;
@@ -65,16 +18,44 @@ interface GameScreenProps {
   showCorrectMessage: boolean;
 }
 
-const getTagInfo = (addedBy: AddedBy, gameMode: GameMode, players?: Player[]) => {
-    // For online mode, try to find the player by their index (P1, P2...)
-    if (gameMode === GameMode.ONLINE && players) {
-        const playerIndex = parseInt(addedBy.split('_')[1]) - 1;
-        if (players[playerIndex]) {
-            return { text: players[playerIndex].name, className: 'bg-blue-600 text-white' };
-        }
-    }
+// Fix: Define TypeScript interfaces for the Web Speech API to avoid type errors.
+// These are not included in default TS DOM typings and are needed for the component to compile.
+interface SpeechRecognition extends EventTarget {
+  continuous: boolean;
+  lang: string;
+  interimResults: boolean;
+  maxAlternatives: number;
+  onresult: (event: SpeechRecognitionEvent) => void;
+  onerror: (event: SpeechRecognitionErrorEvent) => void;
+  onend: () => void;
+  start(): void;
+  stop(): void;
+  abort(): void;
+}
 
-    // Fallback for local modes or if player not found
+interface SpeechRecognitionAlternative {
+  transcript: string;
+}
+
+interface SpeechRecognitionResult {
+  [index: number]: SpeechRecognitionAlternative;
+  length: number;
+}
+
+interface SpeechRecognitionResultList {
+  [index: number]: SpeechRecognitionResult;
+  length: number;
+}
+
+interface SpeechRecognitionEvent extends Event {
+  results: SpeechRecognitionResultList;
+}
+
+interface SpeechRecognitionErrorEvent extends Event {
+  error: string;
+}
+
+const getTagInfo = (addedBy: AddedBy, gameMode: GameMode) => {
     switch (addedBy) {
         case AddedBy.PLAYER_1:
             if (gameMode === GameMode.SINGLE_PLAYER || gameMode === GameMode.SOLO_MODE) {
@@ -94,7 +75,7 @@ const getTagInfo = (addedBy: AddedBy, gameMode: GameMode, players?: Player[]) =>
     }
 }
 
-const GameScreen: React.FC<GameScreenProps> = ({ session, playerId, onTakeTurn, onReset, onFinishTrip, isLoading, loadingMessage, error, showCorrectMessage }) => {
+const GameScreen: React.FC<GameScreenProps> = ({ session, onTakeTurn, onReset, onFinishTrip, isLoading, loadingMessage, error, showCorrectMessage }) => {
   const [recalledItems, setRecalledItems] = useState('');
   const [newItem, setNewItem] = useState('');
   const [isListening, setIsListening] = useState(false);
@@ -107,16 +88,13 @@ const GameScreen: React.FC<GameScreenProps> = ({ session, playerId, onTakeTurn, 
 
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const speechTargetRef = useRef(speechTarget);
-  
-  const isOnlineMode = session.gameMode === GameMode.ONLINE;
   const isSoloMode = session.gameMode === GameMode.SOLO_MODE;
-  const isMyTurn = isOnlineMode ? session.currentPlayerId === playerId : true;
-
 
   useEffect(() => {
+    // Reset hint state whenever the turn changes (indicated by player or item list length changing)
     setHint(null);
     setHintUsed(false);
-  }, [session.currentPlayer, session.items.length, session.currentPlayerId]);
+  }, [session.currentPlayer, session.items.length]);
 
   useEffect(() => {
     speechTargetRef.current = speechTarget;
@@ -141,17 +119,17 @@ const GameScreen: React.FC<GameScreenProps> = ({ session, playerId, onTakeTurn, 
   }, [session.turnEndsAt, isLoading]);
 
   useEffect(() => {
+    // Play timer warning sound when 10s or less remain, not loading, and not at 0.
     if (!isLoading && secondsLeft <= 10 && secondsLeft > 0) {
       playTimerWarning();
     }
   }, [secondsLeft, isLoading]);
 
   useEffect(() => {
-    // Fix: Rename variable to avoid shadowing the 'SpeechRecognition' type.
-    const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (SpeechRecognitionAPI) {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SpeechRecognition) {
       setIsSpeechSupported(true);
-      const recognition: SpeechRecognition = new SpeechRecognitionAPI();
+      const recognition: SpeechRecognition = new SpeechRecognition();
       recognition.continuous = false;
       recognition.lang = 'en-US';
       recognition.interimResults = false;
@@ -182,6 +160,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ session, playerId, onTakeTurn, 
       console.warn('Speech Recognition not supported in this browser.');
     }
 
+    // Cleanup on unmount
     return () => {
       if (recognitionRef.current) {
         recognitionRef.current.abort();
@@ -191,6 +170,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ session, playerId, onTakeTurn, 
 
   const handleMicToggle = (target: 'recalled' | 'new') => {
     if (!recognitionRef.current) return;
+
     if (isListening) {
       recognitionRef.current.stop();
     } else {
@@ -208,8 +188,11 @@ const GameScreen: React.FC<GameScreenProps> = ({ session, playerId, onTakeTurn, 
 
   const handleRequestHint = () => {
     if (hintUsed || session.items.length === 0) return;
+
+    // Determine the next item's hint based on how many items the user has already typed.
     const recalledSoFar = recalledItems.split('\n').map(i => i.trim()).filter(i => i);
     const nextItemIndex = recalledSoFar.length;
+
     if (nextItemIndex < session.items.length) {
       const nextItem = session.items[nextItemIndex];
       setHint(`The next item starts with: ${nextItem.text.charAt(0).toUpperCase()}`);
@@ -220,9 +203,6 @@ const GameScreen: React.FC<GameScreenProps> = ({ session, playerId, onTakeTurn, 
   let turnTitle: string;
   if (isSoloMode) {
     turnTitle = "Solo Mode";
-  } else if (isOnlineMode) {
-    const currentPlayer = session.players?.find(p => p.id === session.currentPlayerId);
-    turnTitle = isMyTurn ? "It's Your Turn!" : `Waiting for ${currentPlayer?.name || '...'}...`;
   } else if (session.gameMode === GameMode.SINGLE_PLAYER) {
     turnTitle = "Your Turn";
   } else {
@@ -250,8 +230,6 @@ const GameScreen: React.FC<GameScreenProps> = ({ session, playerId, onTakeTurn, 
   const timerColor = secondsLeft <= 10 ? 'text-brand-secondary' : 'text-brand-text';
   const timerAnimation = secondsLeft <= 10 ? 'animate-pulse' : '';
 
-  const showTimer = !isSoloMode && !isOnlineMode && session.turnEndsAt;
-
 
   return (
     <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
@@ -262,6 +240,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ session, playerId, onTakeTurn, 
             alt={session.basePrompt}
             className="w-full h-full object-cover transition-opacity duration-300"
           />
+           {/* Street View UI Overlay */}
            <div className="absolute top-4 left-4 bg-black bg-opacity-70 text-white text-xs rounded-md px-2 py-1 font-sans shadow-lg select-none">
                 Street View
             </div>
@@ -292,7 +271,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ session, playerId, onTakeTurn, 
         <div className="p-6 flex-grow">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-3xl font-bold font-display">{turnTitle}</h2>
-            {showTimer && (
+            {!isSoloMode && session.turnEndsAt && (
                 <div className={`text-2xl font-bold tabular-nums ${timerColor} ${timerAnimation}`}>
                   <span className="sr-only">Time left:</span>
                   {secondsLeft}
@@ -310,14 +289,14 @@ const GameScreen: React.FC<GameScreenProps> = ({ session, playerId, onTakeTurn, 
                     onChange={(e) => setRecalledItems(e.target.value)}
                     placeholder="First, recall all the items added so far, each on a new line..."
                     rows={session.items.length}
-                    disabled={isLoading || !isMyTurn}
-                    className={`w-full bg-brand-bg border border-brand-primary rounded-lg px-4 py-3 text-brand-text placeholder-brand-text-muted focus:outline-none focus:ring-2 focus:ring-brand-secondary transition-shadow duration-200 disabled:bg-gray-200 ${isSpeechSupported ? 'pr-12' : ''}`}
+                    disabled={isLoading}
+                    className={`w-full bg-brand-bg border border-brand-primary rounded-lg px-4 py-3 text-brand-text placeholder-brand-text-muted focus:outline-none focus:ring-2 focus:ring-brand-secondary transition-shadow duration-200 ${isSpeechSupported ? 'pr-12' : ''}`}
                     />
                     {isSpeechSupported && (
                     <button
                         type="button"
                         onClick={() => handleMicToggle('recalled')}
-                        disabled={isLoading || !isMyTurn}
+                        disabled={isLoading}
                         className={`absolute top-3 right-0 flex items-center justify-center w-12 text-brand-text-muted hover:text-brand-text transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50 ${isListening && speechTarget === 'recalled' ? 'text-brand-secondary' : ''}`}
                         aria-label={isListening && speechTarget === 'recalled' ? 'Stop listening' : 'Start listening to recall items'}
                     >
@@ -337,15 +316,15 @@ const GameScreen: React.FC<GameScreenProps> = ({ session, playerId, onTakeTurn, 
                 type="text"
                 value={newItem}
                 onChange={(e) => setNewItem(e.target.value)}
-                placeholder={isMyTurn ? "...and what new item are you adding?" : "Waiting for other players..."}
-                disabled={isLoading || !isMyTurn}
+                placeholder="...and what new item are you adding?"
+                disabled={isLoading}
                 className={isSpeechSupported ? 'pr-12' : ''}
               />
               {isSpeechSupported && (
                  <button
                     type="button"
                     onClick={() => handleMicToggle('new')}
-                    disabled={isLoading || !isMyTurn}
+                    disabled={isLoading}
                     className={`absolute inset-y-0 right-0 flex items-center justify-center w-12 text-brand-text-muted hover:text-brand-text transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50 ${isListening && speechTarget === 'new' ? 'text-brand-secondary' : ''}`}
                     aria-label={isListening && speechTarget === 'new' ? 'Stop listening' : 'Start listening to add a new item'}
                   >
@@ -356,7 +335,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ session, playerId, onTakeTurn, 
               )}
             </div>
              <div className="flex flex-col sm:flex-row gap-4">
-                <Button type="submit" disabled={isLoading || !newItem.trim() || !isMyTurn} className="flex-grow">
+                <Button type="submit" disabled={isLoading || !newItem.trim()} className="flex-grow">
                     {isSoloMode ? 'Add Item' : 'Take Turn'}
                 </Button>
                 {!isSoloMode && session.items.length > 0 && (
@@ -364,7 +343,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ session, playerId, onTakeTurn, 
                         type="button"
                         variant="secondary"
                         onClick={handleRequestHint}
-                        disabled={isLoading || hintUsed || !isMyTurn || (recalledItems.split('\n').filter(i => i.trim()).length >= session.items.length)}
+                        disabled={isLoading || hintUsed || (recalledItems.split('\n').filter(i => i.trim()).length >= session.items.length)}
                         className="flex-grow sm:flex-grow-0"
                         title="Get the first letter of the next item. One per turn!"
                     >
@@ -395,8 +374,8 @@ const GameScreen: React.FC<GameScreenProps> = ({ session, playerId, onTakeTurn, 
                     <ul className="space-y-2">
                         {session.items.map((item, index) => (
                             <li key={index} className="flex items-center gap-2 text-brand-text">
-                                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getTagInfo(item.addedBy, session.gameMode, session.players).className}`}>
-                                    {getTagInfo(item.addedBy, session.gameMode, session.players).text}
+                                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getTagInfo(item.addedBy, session.gameMode).className}`}>
+                                    {getTagInfo(item.addedBy, session.gameMode).text}
                                 </span>
                                 <span>{item.text}</span>
                             </li>
