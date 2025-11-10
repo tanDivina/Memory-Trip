@@ -60,3 +60,31 @@ export const validateMemory = async (recalledItems: string[], actualItems: strin
         actualItems,
    });
 };
+
+// --- Online Game Functions ---
+
+export const createOnlineGame = async (prompt: string, playerName: string): Promise<{ gameCode: string, playerId: string, gameState: any }> => {
+    return fetchFromBackend('/api/create-online-game', { prompt, playerName });
+};
+
+export const joinOnlineGame = async (gameCode: string, playerName: string): Promise<{ playerId: string, gameState: any }> => {
+    return fetchFromBackend('/api/join-online-game', { gameCode, playerName });
+};
+
+export const getGameState = async (gameCode: string): Promise<{ gameState: any, gameStatus: string }> => {
+    // Using GET for this would be more idiomatic, but sticking to POST for simplicity with the helper
+    return fetchFromBackend('/api/get-game-state', { gameCode });
+};
+
+export const startGame = async (gameCode: string, playerId: string): Promise<{ gameState: any }> => {
+    return fetchFromBackend('/api/start-game', { gameCode, playerId });
+};
+
+export const submitOnlineTurn = async (gameCode: string, playerId: string, recalledItems: string[], newItem: string): Promise<{ gameState: any }> => {
+    return fetchFromBackend('/api/submit-turn', {
+        gameCode,
+        playerId,
+        recalledItems,
+        newItem
+    });
+};
