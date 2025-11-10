@@ -76,8 +76,8 @@ export const getGameState = async (gameCode: string): Promise<{ gameState: any, 
     return fetchFromBackend('/api/get-game-state', { gameCode });
 };
 
-export const startGame = async (gameCode: string, playerId: string): Promise<{ gameState: any }> => {
-    return fetchFromBackend('/api/start-game', { gameCode, playerId });
+export const startGame = async (gameCode: string, playerId: string, prompt: string): Promise<{ gameState: any }> => {
+    return fetchFromBackend('/api/start-game', { gameCode, playerId, prompt });
 };
 
 export const submitOnlineTurn = async (gameCode: string, playerId: string, recalledItems: string[], newItem: string): Promise<{ gameState: any }> => {

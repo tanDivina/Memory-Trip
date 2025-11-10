@@ -20,6 +20,8 @@ const TURN_DURATION_MS = 60000; // 60 seconds
 
 const titleColors = ['#26a69a', '#d96666', '#5e9ed6', '#d9a057', '#6fbf73', '#b363c2'];
 
+const backgroundImageData = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAYEBAUEBAYFBQUGBgYHCQ4JCQgICRINDQoOFRIWFhUSFBQXGIwVFBkiHRsYIikoJSElLiQqKCQoMDU0PjU2NjP/2wBDAQYHBwYIChgQISgaJSMoNjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjP/wAARCAAgADsDASIAAhEBAxEB/8QAGwAAAgIDAQAAAAAAAAAAAAAAAAQDBgECBQf/xAApEAACAgEDAgUFAQEAAAAAAAABAgMEEQAFIRIGMUETcSIyUWFxgaGx/8QAGAEAAgMAAAAAAAAAAAAAAAAAAQIAAwT/xAAeEQACAgICAwEAAAAAAAAAAAAAAQIRAyESMRNBQv/aAAwDAQACEQMRAD8A+iNc/L8G23Jv3vN6i2T400c0KzV5I3rM5d1I8+2VHbP3p/tG7191uM1iW/NVq1YJHTeNIwRnHJmGT+B8aJ7vu+1SbhXo2Nykq03/kLPE8bI/wB/cMqT/jod3HulOvdV4rG42b15mKxU2R+Sg48jHPyc+3jWpJJno0kkzX1N8v7ruV+vSuN/sUNtTrPXSJDJG68T7ZGBg+dI9o3/cd0uQ0rO9XoFZiZJ5I4mjjGMkkk5PwwPGl227nt1vcJYbG4yVYZgP5Ms8LxMh+uVYHH50X3Dc6NGrZq1biZqqxtHFUZXJkBHtHjIPyT4HjSTtF8Y9k65uvUe83JKdLf7tWzOFSKaOF5GOM9gAD/ALoxtV/ctw26eK3vV2rcWQpDWdIlZ8gHlgDIx6c6A1N322S9FVu7jPjZgDVSeGRWkJOMZCnGTj3aJ7Xu9GCw1WrcTPTErJFVRXJcY/SPGR8k+B40W2NKK7L1h6t32vcP8Ay5d7tV3mQf8AJpwxmQjOC2SM4/GjG2395v7lXoVuqNynDM5SSxLTwMkYxnnkHk/YedCd33XbU3CKtZuMlWm//ACFlheNkfHnOVBI/wA6JbXudKrdT1o6/J67ERFUjVyXBH6RwMj5J8eNK2wUUuzY11vO8X9yp0aPVG40oZ2KzWpaeBkXBOSc8j2A86Lbfe3a5u1WjR6q3FLe8lJLstNAGRcHlgHJ/AGgO77nt8W5RVr24SVoJsDz5Z4XjZDx5zkKSM+M6N7PudKrdT1Ya/Jq6xkxVY1clwR+kcDI+SfHjSvoFFF9nQNZ6m6g3Grcu+ol2/TgmEb1BBAjZwd3JU+P6d9Ntq3Tc9y3OpQourV6nBMSstmWliZIsAkkgnJ7Y8eNIdq3ja4d1ipVtzkpQygeXNPPE8bLx5zkKQceM6Y7duVClu1S/HRD1Y5i/8Ay0a5bBH6RjI+T48aW2Pij2i+/wB5u7tXo0OqFxgnmJWWzLTQskWEJ5HJz2wMfedKOr9ebrf3qnQo9UbglSZyktmWngZEAVjlgHJ8gDwPGgG7bpt6bjFWvbk9SCbHmzTxPE6cQcZylScZx7tGNo3KjU3OpehoCSokrM/8Ayo1y2ARggjPz48eNK+gUV2dM0jqTe9z3qjQo9VL0ayzMJ7E1NAkaBWORycnkA8Dvp/t167du1WvQ6rXUklmYSTzU0CxAKTyOWSc4xgfedJNh3bZqO706FbeJKcDsHaeaeN424q2AcKSDgDvjRjat0o0t1q34qIlijm5/8tGuWwCORjI+fHjStj4o9n/9k=';
+
 const App: React.FC = () => {
   const [gameState, setGameState] = useState<GameState>(GameState.START);
   const [gameSession, setGameSession] = useState<GameSession | null>(null);
@@ -40,18 +42,6 @@ const App: React.FC = () => {
   useEffect(() => {
     setSoundEnabled(isSoundEnabled);
   }, [isSoundEnabled]);
-
-  useEffect(() => {
-    const handleScroll = () => {
-      const offset = window.pageYOffset;
-      document.body.style.backgroundPositionY = `${offset * 0.5}px`;
-    };
-    window.addEventListener('scroll', handleScroll);
-    return () => {
-      window.removeEventListener('scroll', handleScroll);
-      document.body.style.backgroundPositionY = '';
-    };
-  }, []);
 
   // Check for join game link on initial load
   useEffect(() => {
@@ -215,11 +205,11 @@ const App: React.FC = () => {
   }, []);
 
   const handleStartOnlineGame = useCallback(async () => {
-    if (!gameSession?.gameCode || !playerId) return;
+    if (!gameSession?.gameCode || !playerId || !gameSession.basePrompt) return;
     setIsLoading(true);
     setError(null);
     try {
-      await startGame(gameSession.gameCode, playerId);
+      await startGame(gameSession.gameCode, playerId, gameSession.basePrompt);
       // Polling will handle the state transition
     } catch (err) {
       console.error(err);
@@ -457,17 +447,33 @@ const App: React.FC = () => {
     }
   }
 
+  const backgroundStyle: React.CSSProperties = {
+    backgroundColor: '#f5f1e8', // A fallback color
+    backgroundImage: `url('${backgroundImageData}')`,
+    backgroundRepeat: 'repeat',
+    backgroundAttachment: 'fixed',
+  };
+
   return (
-    <div className="min-h-screen w-full flex flex-col items-center p-4 pt-12 md:pt-20">
+    <div className="min-h-screen w-full flex flex-col items-center p-4 pt-12 md:pt-20"
+         style={backgroundStyle}>
       <header className="w-full max-w-5xl text-center mb-8 relative">
         <div className="inline-flex items-center gap-4">
-          <h1 className="text-5xl md:text-6xl font-bold tracking-tight font-display">
-            {'Memory Trip'.split('').map((char, index) => (
-              <span key={index} style={{ color: titleColors[index % titleColors.length] }}>
-                {char === ' ' ? '\u00A0' : char}
-              </span>
-            ))}
-          </h1>
+           <Tooltip text="Back to homepage">
+              <button
+                onClick={handleResetGame}
+                className="bg-transparent border-none p-0 cursor-pointer text-left"
+                aria-label="Go to homepage"
+              >
+                <h1 className="text-5xl md:text-6xl font-bold tracking-tight font-display">
+                  {'Memory Trip'.split('').map((char, index) => (
+                    <span key={index} style={{ color: titleColors[index % titleColors.length] }}>
+                      {char === ' ' ? '\u00A0' : char}
+                    </span>
+                  ))}
+                </h1>
+              </button>
+            </Tooltip>
           <Tooltip text={isSoundEnabled ? 'Disable sound effects' : 'Enable sound effects'}>
             <button
               onClick={() => setIsSoundEnabled(prev => !prev)}
