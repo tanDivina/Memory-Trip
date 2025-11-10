@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Player } from '../types';
 import Button from './Button';
 import Card from './Card';
@@ -14,12 +14,25 @@ interface LobbyScreenProps {
 
 const LobbyScreen: React.FC<LobbyScreenProps> = ({ gameCode, players = [], isHost, onStartGame, isLoading }) => {
   const canStart = isHost && players.length >= 2;
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   const handleCopyCode = () => {
     navigator.clipboard.writeText(gameCode).then(() => {
-        // Maybe show a "Copied!" message briefly
+        setCopiedCode(true);
+        setTimeout(() => setCopiedCode(false), 2000);
     }).catch(err => {
         console.error('Failed to copy code: ', err);
+    });
+  };
+
+  const handleCopyLink = () => {
+    const joinLink = `${window.location.origin}${window.location.pathname}?joinGame=${gameCode}`;
+    navigator.clipboard.writeText(joinLink).then(() => {
+        setCopiedLink(true);
+        setTimeout(() => setCopiedLink(false), 2000);
+    }).catch(err => {
+        console.error('Failed to copy link: ', err);
     });
   };
 
@@ -27,17 +40,21 @@ const LobbyScreen: React.FC<LobbyScreenProps> = ({ gameCode, players = [], isHos
     <Card className="animate-fade-in-up">
       <div className="p-8 text-center">
         <h2 className="text-3xl font-bold font-display mb-2">Game Lobby</h2>
-        <p className="text-brand-text-muted mb-6">Share this code with your friends to join!</p>
+        <p className="text-brand-text-muted mb-6">Share the code or link with your friends to join!</p>
         
         <div 
-            className="bg-brand-bg border-2 border-dashed border-brand-primary rounded-lg py-4 mb-6 flex items-center justify-center gap-4 cursor-pointer hover:border-brand-secondary"
-            onClick={handleCopyCode}
-            title="Click to copy"
+            className="bg-brand-bg border-2 border-dashed border-brand-primary rounded-lg py-4 mb-4 flex items-center justify-center gap-4"
         >
             <p className="text-5xl font-bold tracking-widest text-brand-text">{gameCode}</p>
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-brand-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-            </svg>
+        </div>
+
+        <div className="flex justify-center items-center gap-4 mb-8">
+            <Button variant="secondary" onClick={handleCopyCode} className="py-2 px-4 text-sm">
+                {copiedCode ? 'Code Copied!' : 'Copy Code'}
+            </Button>
+            <Button variant="secondary" onClick={handleCopyLink} className="py-2 px-4 text-sm">
+                {copiedLink ? 'Link Copied!' : 'Copy Invite Link'}
+            </Button>
         </div>
 
         <h3 className="text-xl font-bold font-display mb-4">Players Joined ({players.length}/4)</h3>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Button from './Button';
 import Input from './Input';
 import Card from './Card';
@@ -17,9 +17,10 @@ interface StartScreenProps {
   isLoading: boolean;
   loadingMessage: string;
   error: string | null;
+  initialJoinCode?: string | null;
 }
 
-const StartScreen: React.FC<StartScreenProps> = ({ onStart, onShowGallery, isLoading, loadingMessage, error }) => {
+const StartScreen: React.FC<StartScreenProps> = ({ onStart, onShowGallery, isLoading, loadingMessage, error, initialJoinCode }) => {
   const [destination, setDestination] = useState('');
   const [localGameMode, setLocalGameMode] = useState<GameMode>(GameMode.TWO_PLAYER);
   const [aiPersona, setAiPersona] = useState<string>(AIPersonas[0]);
@@ -27,6 +28,14 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStart, onShowGallery, isLoa
   const [isOnline, setIsOnline] = useState(false);
   const [onlineMode, setOnlineMode] = useState<'create' | 'join'>('create');
   const [gameCode, setGameCode] = useState('');
+
+  useEffect(() => {
+    if (initialJoinCode) {
+      setIsOnline(true);
+      setOnlineMode('join');
+      setGameCode(initialJoinCode);
+    }
+  }, [initialJoinCode]);
 
   const isCustomPersona = aiPersona === 'Custom...';
 

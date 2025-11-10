@@ -33,6 +33,7 @@ const App: React.FC = () => {
   const [isSummaryLoading, setIsSummaryLoading] = useState<boolean>(false);
   const [isInfoModalOpen, setIsInfoModalOpen] = useState<boolean>(false);
   const [isSoundEnabled, setIsSoundEnabled] = useState<boolean>(true);
+  const [initialJoinCode, setInitialJoinCode] = useState<string | null>(null);
   const pollingIntervalRef = useRef<number | null>(null);
 
 
@@ -50,6 +51,17 @@ const App: React.FC = () => {
       window.removeEventListener('scroll', handleScroll);
       document.body.style.backgroundPositionY = '';
     };
+  }, []);
+
+  // Check for join game link on initial load
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const gameCode = urlParams.get('joinGame');
+    if (gameCode) {
+      setInitialJoinCode(gameCode.toUpperCase());
+      // Clean the URL so it doesn't persist on refresh if the user navigates away
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
   }, []);
 
   // Polling effect for online games
@@ -393,7 +405,14 @@ const App: React.FC = () => {
   const renderGameState = () => {
     switch(gameState) {
       case GameState.START:
-        return <StartScreen onStart={handleStart} onShowGallery={handleShowGallery} isLoading={isLoading} loadingMessage={loadingMessage} error={error} />;
+        return <StartScreen 
+                  onStart={handleStart} 
+                  onShowGallery={handleShowGallery} 
+                  isLoading={isLoading} 
+                  loadingMessage={loadingMessage} 
+                  error={error}
+                  initialJoinCode={initialJoinCode} 
+                />;
       case GameState.LOBBY:
         if (gameSession && playerId) {
           return <LobbyScreen 
