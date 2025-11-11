@@ -54,4 +54,42 @@ export const getTripSummary = async (location: string, items: string[]): Promise
         items,
     });
     return data.summary; // Assuming the backend returns { summary: "..." }
+<<<<<<< HEAD
+=======
+};
+
+export const validateMemory = async (recalledItems: string[], actualItems: string[]): Promise<{ correct: boolean }> => {
+   return fetchFromBackend('/api/validate-memory', {
+        recalledItems,
+        actualItems,
+   });
+};
+
+// --- Online Game Functions ---
+
+export const createOnlineGame = async (prompt: string, playerName: string): Promise<{ gameCode: string, playerId: string, gameState: any }> => {
+    return fetchFromBackend('/api/create-online-game', { prompt, playerName });
+};
+
+export const joinOnlineGame = async (gameCode: string, playerName: string): Promise<{ playerId: string, gameState: any }> => {
+    return fetchFromBackend('/api/join-online-game', { gameCode, playerName });
+};
+
+export const getGameState = async (gameCode: string): Promise<{ gameState: any, gameStatus: string }> => {
+    // Using GET for this would be more idiomatic, but sticking to POST for simplicity with the helper
+    return fetchFromBackend('/api/get-game-state', { gameCode });
+};
+
+export const startGame = async (gameCode: string, playerId: string, prompt: string): Promise<{ gameState: any }> => {
+    return fetchFromBackend('/api/start-game', { gameCode, playerId, prompt });
+};
+
+export const submitOnlineTurn = async (gameCode: string, playerId: string, recalledItems: string[], newItem: string): Promise<{ gameState: any }> => {
+    return fetchFromBackend('/api/submit-turn', {
+        gameCode,
+        playerId,
+        recalledItems,
+        newItem
+    });
+>>>>>>> c5bed00711e83c06530a9a65cb9e1505fb6ee2bb
 };
